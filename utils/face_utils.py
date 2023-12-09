@@ -130,26 +130,26 @@ def morphTriangle(img1, img2, img, t1, t2, t, alpha) :
     img[r[1]:r[1]+r[3], r[0]:r[0]+r[2]] = img[r[1]:r[1]+r[3], r[0]:r[0]+r[2]] * ( 1 - mask ) + imgRect * mask
 
 
-def change_face(face_source_name, face_target_name, opt, alpha=0.5):
+def change_face(player, alpha=0.5):
 
-    face_source_name = face_source_name + '.jpg'
-    face_target_name = face_target_name + '.jpg'
+    os.makedirs(player.opt.changed_face_dir, exist_ok=True)
 
-    os.makedirs(opt.changed_face_dir, exist_ok=True)
+    face_source_name = player.name + '.jpg'
+    face_target_name = player.target_face + '.jpg'
 
-    changed = os.path.exists(os.path.join(opt.changed_face_dir, face_source_name))
 
-    face_source_path = os.path.join(opt.changed_face_dir, face_source_name) if changed else os.path.join(opt.known_face_dir, face_source_name)
-    face_target_path = os.path.join(opt.target_face_dir, face_target_name)
+
+    face_source_path = os.path.join(player.opt.known_face_dir, face_source_name)
+    face_target_path = os.path.join(player.opt.target_face_dir, face_target_name)
 
     # detect the facial keypoint for source face
-    points_source = find_facial_keypoints(face_source_name, face_source_path, opt)
+    points_source = find_facial_keypoints(face_source_name, face_source_path, player.opt)
 
     # detect the facial keypoint for target face
-    points_target = find_facial_keypoints(face_target_name, face_target_path, opt)
+    points_target = find_facial_keypoints(face_target_name, face_target_path, player.opt)
 
     # delaunay triangle
-    find_tri_pairs(face_source_name, opt)
+    find_tri_pairs(face_source_name, player.opt)
 
     # start morphing
     img_source = cv2.imread(face_source_path)
@@ -158,8 +158,8 @@ def change_face(face_source_name, face_target_name, opt, alpha=0.5):
     img_source = np.float32(img_source)
     img_target = np.float32(img_target)
 
-    points_source = readPoints(os.path.join(opt.keypoints_dir, face_source_name + '.txt'))
-    points_target = readPoints(os.path.join(opt.keypoints_dir, face_target_name + '.txt'))
+    points_source = readPoints(os.path.join(player.opt.keypoints_dir, face_source_name + '.txt'))
+    points_target = readPoints(os.path.join(player.opt.keypoints_dir, face_target_name + '.txt'))
 
     # compute weighted average point coordinates
     points = []
@@ -172,7 +172,7 @@ def change_face(face_source_name, face_target_name, opt, alpha=0.5):
     imgMorph = np.zeros(img_source.shape, dtype=img_source.dtype)
 
     # Read triangle frmo tri.txt
-    with open(os.path.join(opt.tri_dir, 'tri.txt')) as file:
+    with open(os.path.join(player.opt.tri_dir, 'tri.txt')) as file:
         for line in file :
             x,y,z = line.split()
             
@@ -187,7 +187,8 @@ def change_face(face_source_name, face_target_name, opt, alpha=0.5):
             # Morph one triangle at a time.
             morphTriangle(img_source, img_target, imgMorph, t1, t2, t, alpha)
 
-    cv2.imwrite(os.path.join(opt.changed_face_dir, face_source_name), np.uint8(imgMorph))
+    cv2.imwrite(os.path.join(player.opt.changed_face_dir, face_source_name), np.uint8(imgMorph))
+
 
 
 
