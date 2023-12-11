@@ -70,7 +70,8 @@ def load_known_face(path):
     # image_encoding = face_recognition.face_encodings(image)[0]
     image_encoding = face_recognition.face_encodings(image)
     image_name = str(path).split('/')[-1].split('.')[0]
-    return image_encoding[0], image_name
+    encoding = image_encoding[0] if len(image_encoding) > 0 else None
+    return encoding, image_name
 
 def load_known_faces(opt):
     known_face_encodings = []
@@ -81,6 +82,8 @@ def load_known_faces(opt):
     print(files)
     for file in files:
         image_encoding, image_name = load_known_face(os.path.join(opt.known_face_dir, file))
+        if image_encoding is None:
+            continue
         known_face_encodings.append(image_encoding)
         known_face_names.append(image_name)
         known_player[image_name] = Player(image_name, player=1, opt=opt)
@@ -117,6 +120,7 @@ def face_detection(frame, known_face_encodings, known_face_names, known_face_num
                     name = known_face_names[best_match_index]
         face_names.append(name)
     
+    # Display blood and face of player
     if known_face_num > 0:
         sorted_face_names = sorted(known_face_names)
         player_1 = known_player[sorted_face_names[0]]
@@ -215,8 +219,8 @@ def add_faces(known_face_encodings, known_face_names, known_face_num, known_play
     frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
     cv2.imwrite('./test.jpg', frame)
     for (top, right, bottom, left), name in zip(face_locations, face_names):
-        print(known_face_num)
-        print(face_names)
+        # print(known_face_num)
+        # print(face_names)
         # if name != 'Unknown':
         #     continue
         top *= int(4 * WINDOW_HEIGHT / ORIG_WINDOW_HEIGHT)
@@ -225,11 +229,11 @@ def add_faces(known_face_encodings, known_face_names, known_face_num, known_play
         left *= int(4 * WINDOW_HEIGHT / ORIG_WINDOW_HEIGHT)
 
 
-        print(top, left, bottom, right)
-        print(frame.shape)
+        # print(top, left, bottom, right)
+        # print(frame.shape)
         face_image_new_raw = frame[top:bottom, left:right]
         face_image_new_raw = cv2.resize(face_image_new_raw, (opt.face_img_size, opt.face_img_size))
-        print(face_image_new_raw.shape)
+        # print(face_image_new_raw.shape)
         # face_image_new_raw = cv2.resize(face_image_new_raw, (opt.face_img_size, opt.face_img_size))
         cv2.imwrite(os.path.join(opt.known_face_dir, f'{known_face_num}.jpg'), face_image_new_raw)
         face_image_new_encoding, face_image_new_name = load_known_face(os.path.join(opt.known_face_dir, f'{known_face_num}.jpg'))
@@ -241,7 +245,7 @@ def add_faces(known_face_encodings, known_face_names, known_face_num, known_play
             known_player[str(known_face_num)] = Player(face_image_new_name, player=1, opt=opt)
         known_face_num += 1
 
-    return known_face_encodings, known_face_names, known_face_num, known_player
+    return known_face_encodings, known_face_names, known_face_num, known_player, face_image_new_name
 
 def main(opt):
     # Load known face
@@ -263,7 +267,7 @@ def main(opt):
     face_names = []
 
     past_timesteps_length = 10
-    past_timesteps_threshold = 0.7
+    past_timesteps_threshold = 0.5
     past_timesteps = deque(maxlen=past_timesteps_length)
 
     game_mode = False
@@ -291,7 +295,8 @@ def main(opt):
                 elif event.key == K_2 and game_mode:
                     player_2.update()
                     change_face(player_2, 1 - player_2.blood / FULL_HP)
-                    
+                elif event.key == K_3 and game_mode:
+                    game_mode = not game_mode
                     # change_face(player_2.name, player_2.target_face, player_2.opt, player_2.blood / FULL_HP)
 
         # Read a frame from the video capture
@@ -316,20 +321,42 @@ def main(opt):
             timestep_counter = Counter(flattened_timesteps)
             most_common_combination, most_common_count = timestep_counter.most_common(1)[0]
 
+
             if most_common_count > past_timesteps_length * past_timesteps_threshold:
-                if most_common_combination == ('Unknown', 'happy'):
-                    known_face_encodings, known_face_names, known_face_num, known_player = add_faces(known_face_encodings, known_face_names, known_face_num, known_player, face_locations, face_names, frame_rgb, opt)
-                    # Clear record of emotion in the past timestep, avoid record duplicate face
-                    most_common_combination = None
-                    past_timesteps.clear()
-                    time.sleep(2)
-                elif most_common_combination[0] != 'None' and most_common_combination[1] == 'happy':
+                if most_common_combination[1] == 'happy':
+                    if most_common_combination[0] == 'Unknown':
+                        known_face_encodings, known_face_names, known_face_num, known_player, new_face_name = add_faces(known_face_encodings, known_face_names, known_face_num, known_player, face_locations, face_names, frame_rgb, opt)
+                        # Clear record of emotion in the past timestep, avoid record duplicate face
+                        most_common_combination = None
+                        past_timesteps.clear()
+                        time.sleep(2)
                     # Start to play card game
-                    player_1 = known_player[sorted_face_names[0]] # Player_1 
-                    player_2 = known_player[most_common_combination[0]]
-                    game_mode = not game_mode
+                    if known_face_num > 1:
+                        sorted_face_names = sorted(known_face_names)
+                        player_1 = known_player[sorted_face_names[0]] # Player_1 
+                        player_2 = known_player[most_common_combination[0]] if most_common_combination != None else known_player[new_face_name]
+                        
+                        
+                        game_mode = not game_mode
                 else:
                     pass
+
+
+
+            # if most_common_count > past_timesteps_length * past_timesteps_threshold:
+            #     if most_common_combination == ('Unknown', 'happy'):
+            #         known_face_encodings, known_face_names, known_face_num, known_player = add_faces(known_face_encodings, known_face_names, known_face_num, known_player, face_locations, face_names, frame_rgb, opt)
+            #         # Clear record of emotion in the past timestep, avoid record duplicate face
+            #         most_common_combination = None
+            #         past_timesteps.clear()
+            #         time.sleep(2)
+            #     elif most_common_combination[0] != 'None' and most_common_combination[1] == 'happy':
+            #         # Start to play card game
+            #         player_1 = known_player[sorted_face_names[0]] # Player_1 
+            #         player_2 = known_player[most_common_combination[0]]
+            #         game_mode = not game_mode
+            #     else:
+            #         pass
         else:
             # Poker card game part
             # display information about two player
