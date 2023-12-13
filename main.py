@@ -12,6 +12,7 @@ from collections import deque
 from collections import Counter
 import time
 from utils.face_utils import *
+from ultralytics import YOLO
 
 # Initialize Pygame
 pygame.init()
@@ -62,6 +63,8 @@ HEALTH_BAR_THICKNESS = 2
 # Config for hp
 FULL_HP = 100
 
+# YOLO model
+model = YOLO('./YOLO/best_n.pt')
 
 
 
@@ -215,7 +218,7 @@ class Player:
         self.blood = random.randint(0, self.blood)
 
 def add_faces(known_face_encodings, known_face_names, known_face_num, known_player, face_locations, face_names, frame, opt):
-    frame = np.transpose(frame, (1, 0, 2))
+    # frame = np.transpose(frame, (1, 0, 2))
     frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
     cv2.imwrite('./test.jpg', frame)
     for (top, right, bottom, left), name in zip(face_locations, face_names):
@@ -248,6 +251,11 @@ def add_faces(known_face_encodings, known_face_names, known_face_num, known_play
     return known_face_encodings, known_face_names, known_face_num, known_player, face_image_new_name
 
 def main(opt):
+
+    # Remove all known_face
+    os.system(f'rm -rf {opt.known_face_dir}')    
+
+
     # Load known face
 
     if opt.known_face_dir is not None:
@@ -277,7 +285,7 @@ def main(opt):
 
     while True:
     
-        # print(game_mode)
+        print(game_mode)
 
         # Quit operation
         for event in pygame.event.get():
@@ -295,7 +303,7 @@ def main(opt):
                 elif event.key == K_2 and game_mode:
                     player_2.update()
                     change_face(player_2, 1 - player_2.blood / FULL_HP)
-                elif event.key == K_3 and game_mode:
+                elif event.key == K_3:
                     game_mode = not game_mode
                     # change_face(player_2.name, player_2.target_face, player_2.opt, player_2.blood / FULL_HP)
 
@@ -304,13 +312,13 @@ def main(opt):
 
         # Convert the OpenCV frame to Pygame surface
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        frame_rgb = cv2.resize(frame_rgb, (WINDOW_WIDTH, WINDOW_HEIGHT))
-        small_frame_rgb = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
-        frame_rgb = np.transpose(frame_rgb, (1, 0, 2)) # Transpose image to fit form of pygame
-        pygame_frame = pygame.surfarray.make_surface(frame_rgb)
+        frame_rgb = cv2.resize(frame_rgb, (WINDOW_WIDTH, WINDOW_HEIGHT)) # resize image fit with window size
+        small_frame_rgb = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25) # downsizing image as input image for face detection
+        frame_rgb_transposed = np.transpose(frame_rgb, (1, 0, 2)) # Transpose image to fit form of pygame. Flip the image
+        pygame_frame = pygame.surfarray.make_surface(frame_rgb_transposed)
 
         pygame_frame = pygame.transform.scale(pygame_frame, (WINDOW_WIDTH, WINDOW_HEIGHT))
-        # Display the frame in the Pygame window
+        # Display the background frame in the Pygame window
         screen.blit(pygame_frame, (0, 0))
 
         if not game_mode:
@@ -325,7 +333,7 @@ def main(opt):
             if most_common_count > past_timesteps_length * past_timesteps_threshold:
                 if most_common_combination[1] == 'happy':
                     if most_common_combination[0] == 'Unknown':
-                        known_face_encodings, known_face_names, known_face_num, known_player, new_face_name = add_faces(known_face_encodings, known_face_names, known_face_num, known_player, face_locations, face_names, frame_rgb, opt)
+                        known_face_encodings, known_face_names, known_face_num, known_player, new_face_name = add_faces(known_face_encodings, known_face_names, known_face_num, known_player, face_locations, face_names, frame_rgb_transposed, opt)
                         # Clear record of emotion in the past timestep, avoid record duplicate face
                         most_common_combination = None
                         past_timesteps.clear()
@@ -342,7 +350,7 @@ def main(opt):
                     pass
 
 
-
+            # Old version to add player
             # if most_common_count > past_timesteps_length * past_timesteps_threshold:
             #     if most_common_combination == ('Unknown', 'happy'):
             #         known_face_encodings, known_face_names, known_face_num, known_player = add_faces(known_face_encodings, known_face_names, known_face_num, known_player, face_locations, face_names, frame_rgb, opt)
@@ -357,14 +365,35 @@ def main(opt):
             #         game_mode = not game_mode
             #     else:
             #         pass
+
         else:
             # Poker card game part
             # display information about two player
-            player_1.display_face()
-            player_1.draw_blood_bar()
-            player_2.display_face()
-            player_2.draw_blood_bar()
+            # player_1.display_face()
+            # player_1.draw_blood_bar()
+            # player_2.display_face()
+            # player_2.draw_blood_bar()
+            frame_resized = cv2.resize(frame, (WINDOW_WIDTH, WINDOW_HEIGHT))
+            results = model(frame_resized)
             
+            card_1 = set()
+            card_2 = set()
+
+            for box, label in zip(results[0].boxes.xyxyn.cpu().numpy(), results[0].boxes.cls.cpu().numpy()):
+                print(box)
+                if ((box[1] + box[3]) / 2) < 0.5:
+                    card_1.add(label.item())
+                elif ((box[1] + box[3]) / 2) < 1:
+                    card_2.add(label.item())
+                else:
+                    pass
+                
+            print(card_1)
+            print(card_2)
+            
+                        
+
+
 
             
         
