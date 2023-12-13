@@ -218,7 +218,7 @@ class Player:
         self.blood = random.randint(0, self.blood)
 
 def add_faces(known_face_encodings, known_face_names, known_face_num, known_player, face_locations, face_names, frame, opt):
-    # frame = np.transpose(frame, (1, 0, 2))
+    frame = np.transpose(frame, (1, 0, 2))
     frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
     cv2.imwrite('./test.jpg', frame)
     for (top, right, bottom, left), name in zip(face_locations, face_names):
