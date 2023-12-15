@@ -23,6 +23,56 @@ WINDOW_WIDTH, WINDOW_HEIGHT = 1440, 810
 screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
 pygame.display.set_caption("Video Stream Player")
 
+# load music and sounds
+try:
+    pygame.mixer.music.load("assets/audio/roa-music-innocence.mp3")
+    pygame.mixer.music.set_volume(0.5)
+    pygame.mixer.music.play(-1, 0.0, 5000)
+except:
+    pass
+
+# poker card function
+poker_card = ['Ah'
+              , 'Kh', 'Qh', 'Jh', '10h', '9h', '8h', '7h', '6h', '5h', '4h', '3h', '2h', 'Ad'
+              , 'Kd', 'Qd', 'Jd', '10d', '9d', '8d', '7d', '6d', '5d', '4d', '3d', '2d', 'Ac'
+              , 'Kc', 'Qc', 'Jc', '10c', '9c', '8c', '7c', '6c', '5c', '4c', '3c', '2c', 'As'
+              , 'Ks', 'Qs', 'Js', '10s', '9s', '8s', '7s', '6s', '5s', '4s', '3s', '2s']
+
+def label_to_card_number(label_item):
+    card_values = {
+        'A': 10, 'K': 10, 'Q': 10, 'J': 10,
+        '10': 10, '9': 9, '8': 8, '7': 7, '6': 6,
+        '5': 5, '4': 4, '3': 3, '2': 2
+    }
+    label_item_int = int(label_item)
+    # Ensure label_item is within the valid range
+    if 0 <= label_item_int < len(poker_card):
+        # Get the corresponding card from poker_card list
+        card = poker_card[label_item_int]
+        # Extract the rank from the card
+        rank = card[:-1]  # Exclude the last character (suit)
+        # Map the rank to its numerical value using the dictionary
+        card_number = card_values.get(rank, 0)
+
+        return card_number
+    else:
+        # Handle the case where label_item is out of range
+        return 0
+
+def check_sum_21(hand):
+    # Convert each label item to its corresponding card number
+    hand_values = [label_to_card_number(item) for item in hand]
+    
+    # Check whether the sum of the card numbers is 21
+    return sum(hand_values) == 21
+
+# load vicory image
+lose_image = pygame.image.load("assets/image/min_sun.png").convert_alpha()
+
+# load game over
+game_over = pygame.mixer.Sound("assets/audio/game_over.wav")
+game_over.set_volume(1) 
+
 # OpenCV video capture from webcam (change the index if you have multiple cameras)
 video_capture = cv2.VideoCapture(0)  # Use 0 for the default camera
 
@@ -44,6 +94,7 @@ RED = (255, 0, 0)
 YELLOW = (255, 255, 0)
 WHITE = (255, 255, 255)
 GREEN = (0, 255, 0)
+ORANGE = (255, 165, 0)
 
 # Define size of displayed morphed image
 DISPLAYED_IMG_SIZE = 200
@@ -56,8 +107,6 @@ HEALTH_BAR_X_1, HEALTH_BAR_Y_1 = DISPLAYED_IMG_X_1 + DISPLAYED_IMG_SIZE + INTERV
 HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT = 200, 30
 HEALTH_BAR_X_2, HEALTH_BAR_Y_2 = WINDOW_WIDTH - HEALTH_BAR_X_1 - HEALTH_BAR_WIDTH, 15
 HEALTH_BAR_THICKNESS = 2
-
-
 
 
 # Config for hp
@@ -105,8 +154,6 @@ def face_detection(frame, known_face_encodings, known_face_names, known_face_num
     face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
     face_names = []
 
-    
-
     for face_encoding in face_encodings:
         # See if the face is a match for the known face(s)
         matches = face_recognition.compare_faces(known_face_encodings, face_encoding)
@@ -128,7 +175,7 @@ def face_detection(frame, known_face_encodings, known_face_names, known_face_num
         sorted_face_names = sorted(known_face_names)
         player_1 = known_player[sorted_face_names[0]]
         player_1.display_face()
-        player_1.draw_blood_bar()
+        player_1.draw_blood_bar(game_mode=False)
         if len(face_names) == 0:
             pass
         elif face_names[0] == 'Unknown':
@@ -136,7 +183,7 @@ def face_detection(frame, known_face_encodings, known_face_names, known_face_num
         else:
             player_2 = known_player[face_names[0]]
             player_2.display_face()
-            player_2.draw_blood_bar()
+            player_2.draw_blood_bar(game_mode=False)
 
     for (top, right, bottom, left), name in zip(face_locations, face_names):
             # Scale back up face locations since the frame we detected in was scaled to 1/4 size
@@ -149,7 +196,6 @@ def face_detection(frame, known_face_encodings, known_face_names, known_face_num
             demography = DeepFace.analyze(frame, actions=['emotion'], enforce_detection=False, silent=True)
             emotion_info = demography[0]['emotion']
             emo = max(emotion_info, key=emotion_info.get)
-
 
             if name == 'Unknown':
                 pygame.draw.rect(screen, RED, (left, top, (right - left), (bottom - top)))
@@ -172,32 +218,46 @@ def face_detection(frame, known_face_encodings, known_face_names, known_face_num
     elif face_names[0]:
         return face_names[0], emo, face_locations, face_names
     
-
 class Player:
     def __init__(self, name, player, opt):
+        self.opt = opt
         self.name = name
         self.blood = FULL_HP
+        self.game_round = opt.game_round
+        self.heart = opt.game_round
         self.target_face = None
         self.player = player
-        self.opt = opt
         self.changed = False
         self.card_point = []
 
         target_face_names = [str(file).split('.')[0] for file in os.listdir(opt.target_face_dir) if file.endswith('.jpg')]
         self.target_face = random.choice(target_face_names)
 
-    def draw_blood_bar(self):
+    def draw_blood_bar(self, game_mode = False):
         ratio = self.blood / FULL_HP
-        if self.player == 1:
-            pygame.draw.rect(screen, WHITE, (HEALTH_BAR_X_1 - HEALTH_BAR_THICKNESS, HEALTH_BAR_Y_1 - HEALTH_BAR_THICKNESS, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT))
-            pygame.draw.rect(screen, RED, (HEALTH_BAR_X_1, HEALTH_BAR_Y_1, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT))
-            pygame.draw.rect(screen, GREEN, (HEALTH_BAR_X_1, HEALTH_BAR_Y_1, HEALTH_BAR_WIDTH * ratio, HEALTH_BAR_HEIGHT))    
-        elif self.player == 2:
-            pygame.draw.rect(screen, WHITE, (HEALTH_BAR_X_2 - HEALTH_BAR_THICKNESS, HEALTH_BAR_Y_2 - HEALTH_BAR_THICKNESS, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT))
-            pygame.draw.rect(screen, RED, (HEALTH_BAR_X_2, HEALTH_BAR_Y_2, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT))
-            pygame.draw.rect(screen, GREEN, (HEALTH_BAR_X_2 + HEALTH_BAR_WIDTH * (1 - ratio), HEALTH_BAR_Y_2, HEALTH_BAR_WIDTH * ratio, HEALTH_BAR_HEIGHT))
-        else:
-            raise Exception('Wrong player index!!')
+        if game_mode:
+            if self.player == 1:
+                pygame.draw.rect(screen, WHITE, (HEALTH_BAR_X_1 - HEALTH_BAR_THICKNESS, HEALTH_BAR_Y_1 - HEALTH_BAR_THICKNESS, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT))
+                pygame.draw.rect(screen, RED, (HEALTH_BAR_X_1, HEALTH_BAR_Y_1, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT))
+                pygame.draw.rect(screen, GREEN, (HEALTH_BAR_X_1, HEALTH_BAR_Y_1, HEALTH_BAR_WIDTH * ratio, HEALTH_BAR_HEIGHT))    
+            elif self.player == 2:
+                pygame.draw.rect(screen, WHITE, (HEALTH_BAR_X_2 - HEALTH_BAR_THICKNESS, HEALTH_BAR_Y_2 - HEALTH_BAR_THICKNESS, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT))
+                pygame.draw.rect(screen, RED, (HEALTH_BAR_X_2, HEALTH_BAR_Y_2, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT))
+                pygame.draw.rect(screen, GREEN, (HEALTH_BAR_X_2 + HEALTH_BAR_WIDTH * (1 - ratio), HEALTH_BAR_Y_2, HEALTH_BAR_WIDTH * ratio, HEALTH_BAR_HEIGHT))
+            else:
+                raise Exception('Wrong player index!!')
+        elif not game_mode:
+            if self.player == 1:
+                pygame.draw.rect(screen, WHITE, (HEALTH_BAR_X_1 - HEALTH_BAR_THICKNESS, HEALTH_BAR_Y_1 - HEALTH_BAR_THICKNESS, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT))
+                pygame.draw.rect(screen, RED, (HEALTH_BAR_X_1, HEALTH_BAR_Y_1, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT))
+                pygame.draw.rect(screen, GREEN, (HEALTH_BAR_X_1, HEALTH_BAR_Y_1, HEALTH_BAR_WIDTH * ratio, HEALTH_BAR_HEIGHT))    
+            elif self.player == 2:
+                pygame.draw.rect(screen, WHITE, (HEALTH_BAR_X_2 - HEALTH_BAR_THICKNESS, HEALTH_BAR_Y_2 - HEALTH_BAR_THICKNESS, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT))
+                pygame.draw.rect(screen, RED, (HEALTH_BAR_X_2, HEALTH_BAR_Y_2, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT))
+                pygame.draw.rect(screen, ORANGE, (HEALTH_BAR_X_2 + HEALTH_BAR_WIDTH * (1 - ratio), HEALTH_BAR_Y_2, HEALTH_BAR_WIDTH * ratio, HEALTH_BAR_HEIGHT))
+            else:
+                raise Exception('Wrong player index!!')
+
         
     def display_face(self):    
         face_path = os.path.join(opt.changed_face_dir, self.name + '.jpg') if self.changed else os.path.join(opt.known_face_dir, self.name + '.jpg')
@@ -215,7 +275,31 @@ class Player:
     def update(self):
         if not self.changed:
             self.changed = not self.changed
-        self.blood = random.randint(0, self.blood)
+        if self.heart > 0 :
+            self.heart -= 1
+            self.blood = FULL_HP * (self.heart / self.game_round)
+            # player 1 or 2 no heart
+            if not self.heart:
+                if self.player == 1:
+                    # stop play game music, play game over sound, image, print text?, end game
+                    screen.blit(lose_image, (360, 150))
+                    duration = game_over.get_length() * 1000  # Convert duration to milliseconds
+                    game_over.play()
+                    pygame.time.wait(int(duration))
+                    # time.sleep(3000)   
+                    # video_capture.release()
+                    # pygame.quit()
+                    # exit()
+                elif self.player == 2:
+                    # stop play game music, play game over sound and image(?)
+                    duration = game_over.get_length() * 1000  # Convert duration to milliseconds
+                    game_over.play()
+                    pygame.time.wait(int(duration))
+                    # time.sleep(3000)   
+        if not self.heart:
+            print("you've died!")
+        
+
 
 def add_faces(known_face_encodings, known_face_names, known_face_num, known_player, face_locations, face_names, frame, opt):
     frame = np.transpose(frame, (1, 0, 2))
@@ -255,6 +339,7 @@ def main(opt):
     # Remove all known_face
     os.system(f'rm -rf {opt.known_face_dir}')    
 
+    debug_list = []
 
     # Load known face
 
@@ -263,11 +348,6 @@ def main(opt):
         known_face_encodings, known_face_names, known_face_num, known_player = load_known_faces(opt)
         sorted_face_names = sorted(known_face_names)
         cprint.info(known_face_names)
-
-    
-    
-
-
 
     # Initialize variable of face
     face_locations = []
@@ -283,9 +363,12 @@ def main(opt):
     player_1 = None
     player_2 = None
 
+    most_common_combination = None
+
     while True:
     
-        print(game_mode)
+        print(debug_list)
+        # print(game_mode)
 
         # Quit operation
         for event in pygame.event.get():
@@ -297,14 +380,22 @@ def main(opt):
                     pygame.quit()
                     exit()
                 elif event.key == K_1 and game_mode:
+                    sword = pygame.mixer.Sound("assets/audio/sword.wav")
+                    sword.set_volume(1)
+                    sword.play()
                     player_1.update()
                     change_face(player_1, 1 - player_1.blood / FULL_HP)
                     # change_face(player_1.name, player_1.target_face, player_1.opt, player_1.blood / FULL_HP)
                 elif event.key == K_2 and game_mode:
+                    sword = pygame.mixer.Sound("assets/audio/sword.wav")
+                    sword.set_volume(1)
+                    sword.play()
                     player_2.update()
                     change_face(player_2, 1 - player_2.blood / FULL_HP)
                 elif event.key == K_3:
-                    game_mode = not game_mode
+                    game_over = pygame.mixer.Sound("assets/audio/game_over.wav")
+                    game_over.set_volume(1)   
+                    game_over.play()                 
                     # change_face(player_2.name, player_2.target_face, player_2.opt, player_2.blood / FULL_HP)
 
         # Read a frame from the video capture
@@ -320,6 +411,8 @@ def main(opt):
         pygame_frame = pygame.transform.scale(pygame_frame, (WINDOW_WIDTH, WINDOW_HEIGHT))
         # Display the background frame in the Pygame window
         screen.blit(pygame_frame, (0, 0))
+
+        print(most_common_combination)
 
         if not game_mode:
             
@@ -344,11 +437,14 @@ def main(opt):
                         player_1 = known_player[sorted_face_names[0]] # Player_1 
                         player_2 = known_player[most_common_combination[0]] if most_common_combination != None else known_player[new_face_name]
                         
-                        
+                        past_timesteps.clear()
                         game_mode = not game_mode
+
+                        print("game mode change by start playing game", game_mode)
+                        debug_list.append("game mode change by start playing game" + str(game_mode))
+
                 else:
                     pass
-
 
             # Old version to add player
             # if most_common_count > past_timesteps_length * past_timesteps_threshold:
@@ -369,44 +465,77 @@ def main(opt):
         else:
             # Poker card game part
             # display information about two player
-            # player_1.display_face()
-            # player_1.draw_blood_bar()
-            # player_2.display_face()
-            # player_2.draw_blood_bar()
+            player_1.display_face()
+            player_1.draw_blood_bar(game_mode=True)
+            player_2.display_face()
+            player_2.draw_blood_bar(game_mode=True)
             frame_resized = cv2.resize(frame, (WINDOW_WIDTH, WINDOW_HEIGHT))
-            results = model(frame_resized)
+            results = model(frame_resized, show = False)
             
             card_1 = set()
+            card_num_1 = []
+            result1 = False
             card_2 = set()
+            card_num_2 = []
+            result2 = False
 
             for box, label in zip(results[0].boxes.xyxyn.cpu().numpy(), results[0].boxes.cls.cpu().numpy()):
-                print(box)
-                if ((box[1] + box[3]) / 2) < 0.5:
+                # print(box)
+                if ((box[1] + box[3]) / 2) < 1 and ((box[1] + box[3]) / 2) > 0.5:
                     card_1.add(label.item())
-                elif ((box[1] + box[3]) / 2) < 1:
+                    card_num_1 = []
+                    card_num_1 = list(label_to_card_number(item) for item in card_1)
+                    result1 =  check_sum_21(card_1)
+                elif ((box[1] + box[3]) / 2) < 0.5:
                     card_2.add(label.item())
+                    card_num_2 = []
+                    card_num_2 = list(label_to_card_number(item) for item in card_2)
+                    result2 =  check_sum_21(card_2)
                 else:
                     pass
                 
-            print(card_1)
-            print(card_2)
+                # finish one round
+                if result1:
+                    print("player_2 lose the game")
+                    sword = pygame.mixer.Sound("assets/audio/sword.wav")
+                    sword.set_volume(1)
+                    sword.play()
+                    player_2.update()
+                    change_face(player_2, (1 - player_2.blood / FULL_HP) * 0.5)
+                    card_1.clear()
+                    card_2.clear()
+                    game_mode = not game_mode
+                    print("game mode change by result1", game_mode)
+                    debug_list.append("game mode change by result1" + str(game_mode))
+                    result1 = not result1
+                    
+                elif result2:
+                    print("player_1 lose the game")
+                    sword = pygame.mixer.Sound("assets/audio/sword.wav")
+                    sword.set_volume(1)
+                    sword.play()
+                    player_1.update()
+                    change_face(player_1, (1 - player_1.blood / FULL_HP) * 0.5)
+                    card_1.clear()
+                    card_2.clear()
+                    game_mode = not game_mode
+                    print("game mode change by result2", game_mode)
+                    debug_list.append("game mode change by result2" + str(game_mode))
+                    result2 = not result2
+                    
+            # print(card_1)
+            # print(card_num_1)
+            # print(card_2)
+            # print(card_num_2)
             
-                        
-
-
-
-            
-        
-
         pygame.display.flip()
 
         # Control the frame rate
         clock.tick(fps)
-
+    
     # Release the video capture and close Pygame
     video_capture.release()
     pygame.quit()
-
 
 def opt_parser():
     parser = argparse.ArgumentParser()
@@ -416,10 +545,9 @@ def opt_parser():
     parser.add_argument('--keypoints_dir', type=str, default='keypoints')
     parser.add_argument('--tri_dir', type=str, default='tri')
     parser.add_argument('--face_img_size', type=int, default=640)
+    parser.add_argument('--game_round', type=int, default=4)
     opt = parser.parse_args()
     return opt
-
-
 
 if __name__ == '__main__':
     opt = opt_parser()
