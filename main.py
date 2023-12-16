@@ -23,15 +23,15 @@ WINDOW_WIDTH, WINDOW_HEIGHT = 1440, 810
 screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
 pygame.display.set_caption("Video Stream Player")
 
-# load music and sounds
-try:
-    pygame.mixer.music.load("assets/audio/roa-music-innocence.mp3")
-    pygame.mixer.music.set_volume(0.5)
-    pygame.mixer.music.play(-1, 0.0, 5000)
-except:
-    pass
+# # load music and sounds
+# try:
+#     pygame.mixer.music.load("assets/audio/roa-music-innocence.mp3")
+#     pygame.mixer.music.set_volume(0.5)
+#     pygame.mixer.music.play(-1, 0.0, 5000)
+# except:
+#     pass
 
-# poker card function
+# poker card number mapping dictionary
 poker_card = ['Ah'
               , 'Kh', 'Qh', 'Jh', '10h', '9h', '8h', '7h', '6h', '5h', '4h', '3h', '2h', 'Ad'
               , 'Kd', 'Qd', 'Jd', '10d', '9d', '8d', '7d', '6d', '5d', '4d', '3d', '2d', 'Ac'
@@ -59,19 +59,26 @@ def label_to_card_number(label_item):
         # Handle the case where label_item is out of range
         return 0
 
-def check_sum_21(hand):
+def check_game_result(hand1, hand2):
     # Convert each label item to its corresponding card number
-    hand_values = [label_to_card_number(item) for item in hand]
+    # Then sum up card numbers
+    hand_values1 = sum([label_to_card_number(item) for item in hand1])
+    hand_values2 = sum([label_to_card_number(item) for item in hand2])
+
+    # player2 is the dealer, if player1 greater than 21, then player1 loses anyway.
+    if hand_values1 > 21:
+        loser = 1
+    elif hand_values2 > 21:
+        loser = 2
+    elif hand_values1 == hand_values2:
+        loser = 0
+    elif hand_values1 < hand_values2:
+        loser = 1
+    elif hand_values2 < hand_values1:
+        loser = 2
     
-    # Check whether the sum of the card numbers is 21
-    return sum(hand_values) == 21
+    return loser
 
-# load vicory image
-lose_image = pygame.image.load("assets/image/min_sun.png").convert_alpha()
-
-# load game over
-game_over = pygame.mixer.Sound("assets/audio/game_over.wav")
-game_over.set_volume(1) 
 
 # OpenCV video capture from webcam (change the index if you have multiple cameras)
 video_capture = cv2.VideoCapture(0)  # Use 0 for the default camera
@@ -87,7 +94,6 @@ fps = 30  # Assuming a standard webcam provides 30 frames per second
 
 # Set up Pygame clock
 clock = pygame.time.Clock()
-
 
 # define colours
 RED = (255, 0, 0)
@@ -108,14 +114,11 @@ HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT = 200, 30
 HEALTH_BAR_X_2, HEALTH_BAR_Y_2 = WINDOW_WIDTH - HEALTH_BAR_X_1 - HEALTH_BAR_WIDTH, 15
 HEALTH_BAR_THICKNESS = 2
 
-
 # Config for hp
 FULL_HP = 100
 
 # YOLO model
 model = YOLO('./YOLO/best_n.pt')
-
-
 
 def load_known_face(path):
     image = face_recognition.load_image_file(path)
@@ -235,29 +238,24 @@ class Player:
 
     def draw_blood_bar(self, game_mode = False):
         ratio = self.blood / FULL_HP
-        if game_mode:
-            if self.player == 1:
-                pygame.draw.rect(screen, WHITE, (HEALTH_BAR_X_1 - HEALTH_BAR_THICKNESS, HEALTH_BAR_Y_1 - HEALTH_BAR_THICKNESS, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT))
-                pygame.draw.rect(screen, RED, (HEALTH_BAR_X_1, HEALTH_BAR_Y_1, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT))
-                pygame.draw.rect(screen, GREEN, (HEALTH_BAR_X_1, HEALTH_BAR_Y_1, HEALTH_BAR_WIDTH * ratio, HEALTH_BAR_HEIGHT))    
-            elif self.player == 2:
+        # draw blood bar for player1
+        if self.player == 1:
+            pygame.draw.rect(screen, WHITE, (HEALTH_BAR_X_1 - HEALTH_BAR_THICKNESS, HEALTH_BAR_Y_1 - HEALTH_BAR_THICKNESS, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT))
+            pygame.draw.rect(screen, RED, (HEALTH_BAR_X_1, HEALTH_BAR_Y_1, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT))
+            pygame.draw.rect(screen, GREEN, (HEALTH_BAR_X_1, HEALTH_BAR_Y_1, HEALTH_BAR_WIDTH * ratio, HEALTH_BAR_HEIGHT))    
+        # draw blood bar for player2,
+        elif self.player == 2:
+            # game_mode: red ; not game_mode: orange
+            if game_mode:
                 pygame.draw.rect(screen, WHITE, (HEALTH_BAR_X_2 - HEALTH_BAR_THICKNESS, HEALTH_BAR_Y_2 - HEALTH_BAR_THICKNESS, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT))
                 pygame.draw.rect(screen, RED, (HEALTH_BAR_X_2, HEALTH_BAR_Y_2, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT))
                 pygame.draw.rect(screen, GREEN, (HEALTH_BAR_X_2 + HEALTH_BAR_WIDTH * (1 - ratio), HEALTH_BAR_Y_2, HEALTH_BAR_WIDTH * ratio, HEALTH_BAR_HEIGHT))
-            else:
-                raise Exception('Wrong player index!!')
-        elif not game_mode:
-            if self.player == 1:
-                pygame.draw.rect(screen, WHITE, (HEALTH_BAR_X_1 - HEALTH_BAR_THICKNESS, HEALTH_BAR_Y_1 - HEALTH_BAR_THICKNESS, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT))
-                pygame.draw.rect(screen, RED, (HEALTH_BAR_X_1, HEALTH_BAR_Y_1, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT))
-                pygame.draw.rect(screen, GREEN, (HEALTH_BAR_X_1, HEALTH_BAR_Y_1, HEALTH_BAR_WIDTH * ratio, HEALTH_BAR_HEIGHT))    
-            elif self.player == 2:
+            elif not game_mode:
                 pygame.draw.rect(screen, WHITE, (HEALTH_BAR_X_2 - HEALTH_BAR_THICKNESS, HEALTH_BAR_Y_2 - HEALTH_BAR_THICKNESS, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT))
                 pygame.draw.rect(screen, RED, (HEALTH_BAR_X_2, HEALTH_BAR_Y_2, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT))
                 pygame.draw.rect(screen, ORANGE, (HEALTH_BAR_X_2 + HEALTH_BAR_WIDTH * (1 - ratio), HEALTH_BAR_Y_2, HEALTH_BAR_WIDTH * ratio, HEALTH_BAR_HEIGHT))
-            else:
-                raise Exception('Wrong player index!!')
-
+        else:
+            raise Exception('Wrong player index!!')
         
     def display_face(self):    
         face_path = os.path.join(opt.changed_face_dir, self.name + '.jpg') if self.changed else os.path.join(opt.known_face_dir, self.name + '.jpg')
@@ -272,34 +270,37 @@ class Player:
     def draw_text(self, text, font, text_col, x, y):
         img = font.render(text, True, text_col)
         screen.blit(img, (x, y))
+    
     def update(self):
         if not self.changed:
             self.changed = not self.changed
         if self.heart > 0 :
+            # load sword sound and play
+            sword = pygame.mixer.Sound("assets/audio/sword.wav")
+            sword.set_volume(1)
+            sword.play()
+
             self.heart -= 1
             self.blood = FULL_HP * (self.heart / self.game_round)
-            # player 1 or 2 no heart
-            if not self.heart:
-                if self.player == 1:
-                    # stop play game music, play game over sound, image, print text?, end game
-                    screen.blit(lose_image, (360, 150))
-                    duration = game_over.get_length() * 1000  # Convert duration to milliseconds
-                    game_over.play()
-                    pygame.time.wait(int(duration))
-                    # time.sleep(3000)   
-                    # video_capture.release()
-                    # pygame.quit()
-                    # exit()
-                elif self.player == 2:
-                    # stop play game music, play game over sound and image(?)
-                    duration = game_over.get_length() * 1000  # Convert duration to milliseconds
-                    game_over.play()
-                    pygame.time.wait(int(duration))
-                    # time.sleep(3000)   
-        if not self.heart:
-            print("you've died!")
-        
+        else:
+            print("you're out, stop playing game!!")
+    
+    def die(self):
+        # load game over sound and play
+        game_over = pygame.mixer.Sound("assets/audio/game_over.wav")
+        game_over.set_volume(1) 
+        duration = (game_over.get_length()-3) * 1000  # Convert duration to milliseconds
+        game_over.play()
+        pygame.time.wait(int(duration))
 
+        # load vicory image and display, wait for 5 sec
+        lose_image = pygame.image.load("assets/image/min_sun.png").convert_alpha()
+        lose_image = pygame.transform.scale(lose_image, (WINDOW_WIDTH, WINDOW_HEIGHT))  # Resize image to screen dimensions
+        screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+        pygame.display.set_caption("Game Over")
+        screen.blit(lose_image, (0, 0))
+        pygame.display.flip()  # Update the display
+        pygame.time.delay(5000)
 
 def add_faces(known_face_encodings, known_face_names, known_face_num, known_player, face_locations, face_names, frame, opt):
     frame = np.transpose(frame, (1, 0, 2))
@@ -314,7 +315,6 @@ def add_faces(known_face_encodings, known_face_names, known_face_num, known_play
         right *= int(4 * WINDOW_HEIGHT / ORIG_WINDOW_HEIGHT)
         bottom *= int(4 * WINDOW_HEIGHT / ORIG_WINDOW_HEIGHT)
         left *= int(4 * WINDOW_HEIGHT / ORIG_WINDOW_HEIGHT)
-
 
         # print(top, left, bottom, right)
         # print(frame.shape)
@@ -358,7 +358,8 @@ def main(opt):
     past_timesteps_threshold = 0.5
     past_timesteps = deque(maxlen=past_timesteps_length)
 
-    game_mode = False
+    game_mode = True
+    end_game = False
 
     player_1 = None
     player_2 = None
@@ -380,21 +381,15 @@ def main(opt):
                     pygame.quit()
                     exit()
                 elif event.key == K_1 and game_mode:
-                    sword = pygame.mixer.Sound("assets/audio/sword.wav")
-                    sword.set_volume(1)
                     sword.play()
                     player_1.update()
                     change_face(player_1, 1 - player_1.blood / FULL_HP)
                     # change_face(player_1.name, player_1.target_face, player_1.opt, player_1.blood / FULL_HP)
                 elif event.key == K_2 and game_mode:
-                    sword = pygame.mixer.Sound("assets/audio/sword.wav")
-                    sword.set_volume(1)
                     sword.play()
                     player_2.update()
                     change_face(player_2, 1 - player_2.blood / FULL_HP)
                 elif event.key == K_3:
-                    game_over = pygame.mixer.Sound("assets/audio/game_over.wav")
-                    game_over.set_volume(1)   
                     game_over.play()                 
                     # change_face(player_2.name, player_2.target_face, player_2.opt, player_2.blood / FULL_HP)
 
@@ -422,7 +417,6 @@ def main(opt):
             timestep_counter = Counter(flattened_timesteps)
             most_common_combination, most_common_count = timestep_counter.most_common(1)[0]
 
-
             if most_common_count > past_timesteps_length * past_timesteps_threshold:
                 if most_common_combination[1] == 'happy':
                     if most_common_combination[0] == 'Unknown':
@@ -440,9 +434,8 @@ def main(opt):
                         past_timesteps.clear()
                         game_mode = not game_mode
 
-                        print("game mode change by start playing game", game_mode)
-                        debug_list.append("game mode change by start playing game" + str(game_mode))
-
+                        # print("game mode change by start playing game", game_mode)
+                        debug_list.append("game mode change by start playing game " + str(game_mode))
                 else:
                     pass
 
@@ -474,10 +467,8 @@ def main(opt):
             
             card_1 = set()
             card_num_1 = []
-            result1 = False
             card_2 = set()
             card_num_2 = []
-            result2 = False
 
             for box, label in zip(results[0].boxes.xyxyn.cpu().numpy(), results[0].boxes.cls.cpu().numpy()):
                 # print(box)
@@ -485,44 +476,62 @@ def main(opt):
                     card_1.add(label.item())
                     card_num_1 = []
                     card_num_1 = list(label_to_card_number(item) for item in card_1)
-                    result1 =  check_sum_21(card_1)
                 elif ((box[1] + box[3]) / 2) < 0.5:
                     card_2.add(label.item())
                     card_num_2 = []
                     card_num_2 = list(label_to_card_number(item) for item in card_2)
-                    result2 =  check_sum_21(card_2)
                 else:
                     pass
-                
-                # finish one round
-                if result1:
-                    print("player_2 lose the game")
-                    sword = pygame.mixer.Sound("assets/audio/sword.wav")
-                    sword.set_volume(1)
-                    sword.play()
-                    player_2.update()
-                    change_face(player_2, (1 - player_2.blood / FULL_HP) * 0.5)
-                    card_1.clear()
-                    card_2.clear()
-                    game_mode = not game_mode
-                    print("game mode change by result1", game_mode)
-                    debug_list.append("game mode change by result1" + str(game_mode))
-                    result1 = not result1
-                    
-                elif result2:
-                    print("player_1 lose the game")
-                    sword = pygame.mixer.Sound("assets/audio/sword.wav")
-                    sword.set_volume(1)
-                    sword.play()
-                    player_1.update()
-                    change_face(player_1, (1 - player_1.blood / FULL_HP) * 0.5)
-                    card_1.clear()
-                    card_2.clear()
-                    game_mode = not game_mode
-                    print("game mode change by result2", game_mode)
-                    debug_list.append("game mode change by result2" + str(game_mode))
-                    result2 = not result2
-                    
+
+            # card game end, decide game winner
+            card_detect_threshold = 0.5
+            card_detect_timesteps = deque(maxlen=10)
+            for event in pygame.event.get():
+                if event.type == KEYDOWN:
+                    # finish one round
+                    if event.key == K_SPACE:
+                        result =  check_game_result(card_1, card_2)
+                        card_detect_timesteps.append({"result": result})
+                        flattened_card_timesteps = [(item["result"]) for item in card_detect_timesteps]
+                        card_timestep_counter = Counter(flattened_card_timesteps)
+                        stable_result , most_common_count = card_timestep_counter.most_common(1)[0]
+                        if most_common_count > len(card_detect_timesteps) * card_detect_threshold:
+                            # game end in a draw
+                            if not stable_result:
+                                game_mode = not game_mode
+                                debug_list.append("game mode change by not result " + str(game_mode))
+                            # player1 lose the game
+                            elif stable_result == 1:
+                                print("player_1 lose the game")
+                                player_1.update()
+                                change_face(player_1, (1 - player_1.blood / FULL_HP) * 0.5)
+                                card_1.clear()
+                                card_2.clear()
+                                # player1 died
+                                if player_1.blood == 0:
+                                    end_game = True
+                                else:
+                                    game_mode = not game_mode
+                                debug_list.append("game mode change by result1 " + str(game_mode))
+                            # player2 lose the game
+                            elif stable_result == 2:
+                                print("player_2 lose the game")
+                                player_2.update()
+                                change_face(player_2, (1 - player_2.blood / FULL_HP) * 0.5)
+                                card_1.clear()
+                                card_2.clear()
+                                # player2 died
+                                if player_2.blood == 0:
+                                    player_2.die()
+                                game_mode = not game_mode
+                                debug_list.append("game mode change by result2 " + str(game_mode))
+
+            if end_game:
+                player_1.die()
+                video_capture.release()
+                pygame.quit()
+                exit()
+       
             # print(card_1)
             # print(card_num_1)
             # print(card_2)
