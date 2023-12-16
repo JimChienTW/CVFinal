@@ -215,7 +215,9 @@ def face_detection(frame, known_face_encodings, known_face_names, known_face_num
 
         if name == 'Unknown':
             pygame.draw.rect(screen, RED, (left, top, (right - left), (bottom - top)), 3)
-            draw_text(name, RED, face_locations)
+            draw_text((str(name) + " " + str(emo)), RED, face_locations)
+            # draw_text(name, RED, face_locations)
+
         #     # # Draw a box around the face
         #     # cv2.rectangle(frame, (left, top), (right, bottom), (0, 0, 255), 2)
         #     # # Draw a label with a name below the face
@@ -224,7 +226,8 @@ def face_detection(frame, known_face_encodings, known_face_names, known_face_num
         #     # cv2.putText(frame, name + '\n' + emo, (left + 6, bottom - 6), font, 1.0, (255, 255, 255), 1)
         else:
             pygame.draw.rect(screen, GREEN, (left, top, (right - left), (bottom - top)), 3)
-            draw_text(name, GREEN, face_locations)
+            draw_text((str(name) + " " + str(emo)), GREEN, face_locations)
+            # draw_text(name, GREEN, face_locations)
 
         #     # # Draw a box around the face
         #     # cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
