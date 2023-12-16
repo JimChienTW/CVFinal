@@ -23,6 +23,10 @@ WINDOW_WIDTH, WINDOW_HEIGHT = 1440, 810
 screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
 pygame.display.set_caption("Video Stream Player")
 
+# Set up the Pygame text font object
+font_size = 24
+font = pygame.font.Font(None, font_size)  # You can replace 'None' with a font file path if you have a specific font
+
 # # load music and sounds
 # try:
 #     pygame.mixer.music.load("assets/audio/roa-music-innocence.mp3")
@@ -144,6 +148,16 @@ def load_known_faces(opt):
         known_player[image_name] = Player(image_name, player=1, opt=opt)
     return known_face_encodings, known_face_names, len(known_face_names), known_player
 
+def draw_text(text, color, face_locations):
+    for (top, right, bottom, left) in face_locations:
+        # Scale back up face locations since the frame we detected in was scaled to 1/4 size
+        top *= 4 * WINDOW_HEIGHT / ORIG_WINDOW_HEIGHT
+        right *= 4 * WINDOW_HEIGHT / ORIG_WINDOW_HEIGHT
+        bottom *= 4 * WINDOW_HEIGHT / ORIG_WINDOW_HEIGHT
+        left *= 4 * WINDOW_HEIGHT / ORIG_WINDOW_HEIGHT
+    text = font.render(text, True, color)
+    text_rect = text.get_rect(left=left, top=bottom + 10)  # Adjust Y-coordinate for positioning
+    screen.blit(text, text_rect)
 
 def face_detection(frame, known_face_encodings, known_face_names, known_face_num, known_player):
     # Resize frame of video to 1/4 size for faster face recognition processing
@@ -189,33 +203,35 @@ def face_detection(frame, known_face_encodings, known_face_names, known_face_num
             player_2.draw_blood_bar(game_mode=False)
 
     for (top, right, bottom, left), name in zip(face_locations, face_names):
-            # Scale back up face locations since the frame we detected in was scaled to 1/4 size
-            top *= 4 * WINDOW_HEIGHT / ORIG_WINDOW_HEIGHT
-            right *= 4 * WINDOW_HEIGHT / ORIG_WINDOW_HEIGHT
-            bottom *= 4 * WINDOW_HEIGHT / ORIG_WINDOW_HEIGHT
-            left *= 4 * WINDOW_HEIGHT / ORIG_WINDOW_HEIGHT
+        # Scale back up face locations since the frame we detected in was scaled to 1/4 size
+        top *= 4 * WINDOW_HEIGHT / ORIG_WINDOW_HEIGHT
+        right *= 4 * WINDOW_HEIGHT / ORIG_WINDOW_HEIGHT
+        bottom *= 4 * WINDOW_HEIGHT / ORIG_WINDOW_HEIGHT
+        left *= 4 * WINDOW_HEIGHT / ORIG_WINDOW_HEIGHT
+        
+        demography = DeepFace.analyze(frame, actions=['emotion'], enforce_detection=False, silent=True)
+        emotion_info = demography[0]['emotion']
+        emo = max(emotion_info, key=emotion_info.get)
 
-            
-            demography = DeepFace.analyze(frame, actions=['emotion'], enforce_detection=False, silent=True)
-            emotion_info = demography[0]['emotion']
-            emo = max(emotion_info, key=emotion_info.get)
+        if name == 'Unknown':
+            pygame.draw.rect(screen, RED, (left, top, (right - left), (bottom - top)), 3)
+            draw_text(name, RED, face_locations)
+        #     # # Draw a box around the face
+        #     # cv2.rectangle(frame, (left, top), (right, bottom), (0, 0, 255), 2)
+        #     # # Draw a label with a name below the face
+        #     # cv2.rectangle(frame, (left, bottom - 35), (right, bottom), (0, 0, 255), cv2.FILLED)
+        #     # font = cv2.FONT_HERSHEY_DUPLEX
+        #     # cv2.putText(frame, name + '\n' + emo, (left + 6, bottom - 6), font, 1.0, (255, 255, 255), 1)
+        else:
+            pygame.draw.rect(screen, GREEN, (left, top, (right - left), (bottom - top)), 3)
+            draw_text(name, GREEN, face_locations)
 
-            if name == 'Unknown':
-                pygame.draw.rect(screen, RED, (left, top, (right - left), (bottom - top)))
-                # # Draw a box around the face
-                # cv2.rectangle(frame, (left, top), (right, bottom), (0, 0, 255), 2)
-                # # Draw a label with a name below the face
-                # cv2.rectangle(frame, (left, bottom - 35), (right, bottom), (0, 0, 255), cv2.FILLED)
-                # font = cv2.FONT_HERSHEY_DUPLEX
-                # cv2.putText(frame, name + '\n' + emo, (left + 6, bottom - 6), font, 1.0, (255, 255, 255), 1)
-            else:
-                pygame.draw.rect(screen, GREEN, (left, top, (right - left), (bottom - top)))
-                # # Draw a box around the face
-                # cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
-                # # Draw a label with a name below the face
-                # cv2.rectangle(frame, (left, bottom - 35), (right, bottom), (0, 255, 0), cv2.FILLED)
-                # font = cv2.FONT_HERSHEY_DUPLEX
-                # cv2.putText(frame, name, (left + 6, bottom - 6), font, 1.0, (255, 255, 255), 1)
+        #     # # Draw a box around the face
+        #     # cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
+        #     # # Draw a label with a name below the face
+        #     # cv2.rectangle(frame, (left, bottom - 35), (right, bottom), (0, 255, 0), cv2.FILLED)
+        #     # font = cv2.FONT_HERSHEY_DUPLEX
+        #     # cv2.putText(frame, name, (left + 6, bottom - 6), font, 1.0, (255, 255, 255), 1)
     if len(face_names) == 0:
         return 'None', 'None', face_locations, face_names
     elif face_names[0]:
@@ -267,9 +283,6 @@ class Player:
             screen.blit(image, (DISPLAYED_IMG_X_2, DISPLAYED_IMG_Y_2))
         else:
             raise Exception('Wrong player index!!')
-    def draw_text(self, text, font, text_col, x, y):
-        img = font.render(text, True, text_col)
-        screen.blit(img, (x, y))
     
     def update(self):
         if not self.changed:
@@ -358,7 +371,7 @@ def main(opt):
     past_timesteps_threshold = 0.5
     past_timesteps = deque(maxlen=past_timesteps_length)
 
-    game_mode = True
+    game_mode = False
     end_game = False
 
     player_1 = None
@@ -381,20 +394,18 @@ def main(opt):
                     pygame.quit()
                     exit()
                 elif event.key == K_1 and game_mode:
-                    sword.play()
                     player_1.update()
                     change_face(player_1, 1 - player_1.blood / FULL_HP)
                     # change_face(player_1.name, player_1.target_face, player_1.opt, player_1.blood / FULL_HP)
                 elif event.key == K_2 and game_mode:
-                    sword.play()
                     player_2.update()
                     change_face(player_2, 1 - player_2.blood / FULL_HP)
                 elif event.key == K_3:
-                    game_over.play()                 
-                    # change_face(player_2.name, player_2.target_face, player_2.opt, player_2.blood / FULL_HP)
+                    player_2.update()
+                    change_face(player_2.name, player_2.target_face, player_2.opt, player_2.blood / FULL_HP)
 
         # Read a frame from the video capture
-        ret, frame = video_capture.read()
+        _, frame = video_capture.read()
 
         # Convert the OpenCV frame to Pygame surface
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -409,9 +420,9 @@ def main(opt):
 
         print(most_common_combination)
 
+        opponet_name, opponent_emo, face_locations, face_names = face_detection(small_frame_rgb, known_face_encodings, known_face_names, known_face_num, known_player)
+
         if not game_mode:
-            
-            opponet_name, opponent_emo, face_locations, face_names = face_detection(small_frame_rgb, known_face_encodings, known_face_names, known_face_num, known_player)
             past_timesteps.append({"name": opponet_name, "emo": opponent_emo})
             flattened_timesteps = [(item["name"], item["emo"]) for item in past_timesteps]
             timestep_counter = Counter(flattened_timesteps)
@@ -542,9 +553,9 @@ def main(opt):
         # Control the frame rate
         clock.tick(fps)
     
-    # Release the video capture and close Pygame
-    video_capture.release()
-    pygame.quit()
+    # # Release the video capture and close Pygame
+    # video_capture.release()
+    # pygame.quit()
 
 def opt_parser():
     parser = argparse.ArgumentParser()
