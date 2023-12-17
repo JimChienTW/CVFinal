@@ -148,15 +148,9 @@ def load_known_faces(opt):
         known_player[image_name] = Player(image_name, player=1, opt=opt)
     return known_face_encodings, known_face_names, len(known_face_names), known_player
 
-def draw_text(text, color, face_locations):
-    for (top, right, bottom, left) in face_locations:
-        # Scale back up face locations since the frame we detected in was scaled to 1/4 size
-        top *= 4 * WINDOW_HEIGHT / ORIG_WINDOW_HEIGHT
-        right *= 4 * WINDOW_HEIGHT / ORIG_WINDOW_HEIGHT
-        bottom *= 4 * WINDOW_HEIGHT / ORIG_WINDOW_HEIGHT
-        left *= 4 * WINDOW_HEIGHT / ORIG_WINDOW_HEIGHT
+def draw_text(text, color, left, top):
     text = font.render(text, True, color)
-    text_rect = text.get_rect(left=left, top=bottom + 10)  # Adjust Y-coordinate for positioning
+    text_rect = text.get_rect(left=left, top=top)  
     screen.blit(text, text_rect)
 
 def face_detection(frame, known_face_encodings, known_face_names, known_face_num, known_player):
@@ -215,9 +209,8 @@ def face_detection(frame, known_face_encodings, known_face_names, known_face_num
 
         if name == 'Unknown':
             pygame.draw.rect(screen, RED, (left, top, (right - left), (bottom - top)), 3)
-            draw_text((str(name) + " " + str(emo)), RED, face_locations)
+            draw_text((str(name) + ", " + str(emo)), RED, left, bottom + 10)
             # draw_text(name, RED, face_locations)
-
         #     # # Draw a box around the face
         #     # cv2.rectangle(frame, (left, top), (right, bottom), (0, 0, 255), 2)
         #     # # Draw a label with a name below the face
@@ -226,7 +219,7 @@ def face_detection(frame, known_face_encodings, known_face_names, known_face_num
         #     # cv2.putText(frame, name + '\n' + emo, (left + 6, bottom - 6), font, 1.0, (255, 255, 255), 1)
         else:
             pygame.draw.rect(screen, GREEN, (left, top, (right - left), (bottom - top)), 3)
-            draw_text((str(name) + " " + str(emo)), GREEN, face_locations)
+            draw_text((str(name) + ", " + str(emo)), GREEN, left, bottom + 10)
             # draw_text(name, GREEN, face_locations)
 
         #     # # Draw a box around the face
@@ -310,7 +303,7 @@ class Player:
         pygame.time.wait(int(duration))
 
         # load vicory image and display, wait for 5 sec
-        lose_image = pygame.image.load("assets/image/min_sun.png").convert_alpha()
+        lose_image = pygame.image.load(os.path.join(opt.changed_face_dir, self.name + '.jpg')).convert_alpha()
         lose_image = pygame.transform.scale(lose_image, (WINDOW_WIDTH, WINDOW_HEIGHT))  # Resize image to screen dimensions
         screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
         pygame.display.set_caption("Game Over")
@@ -396,16 +389,18 @@ def main(opt):
                 if event.key == K_q:
                     pygame.quit()
                     exit()
-                elif event.key == K_1 and game_mode:
+                elif event.key == K_1:
                     player_1.update()
                     change_face(player_1, 1 - player_1.blood / FULL_HP)
                     # change_face(player_1.name, player_1.target_face, player_1.opt, player_1.blood / FULL_HP)
-                elif event.key == K_2 and game_mode:
+                elif event.key == K_2 :
                     player_2.update()
                     change_face(player_2, 1 - player_2.blood / FULL_HP)
                 elif event.key == K_3:
+                    # game_over.play()                 
+                    player_1.update()
                     player_2.update()
-                    change_face(player_2.name, player_2.target_face, player_2.opt, player_2.blood / FULL_HP)
+                    change_face(player_2, 1 - player_2.blood / FULL_HP)
 
         # Read a frame from the video capture
         _, frame = video_capture.read()
@@ -446,28 +441,13 @@ def main(opt):
                         player_2 = known_player[most_common_combination[0]] if most_common_combination != None else known_player[new_face_name]
                         
                         past_timesteps.clear()
-                        game_mode = not game_mode
+                        if player_2.blood > 0:
+                            game_mode = not game_mode
 
                         # print("game mode change by start playing game", game_mode)
                         debug_list.append("game mode change by start playing game " + str(game_mode))
                 else:
                     pass
-
-            # Old version to add player
-            # if most_common_count > past_timesteps_length * past_timesteps_threshold:
-            #     if most_common_combination == ('Unknown', 'happy'):
-            #         known_face_encodings, known_face_names, known_face_num, known_player = add_faces(known_face_encodings, known_face_names, known_face_num, known_player, face_locations, face_names, frame_rgb, opt)
-            #         # Clear record of emotion in the past timestep, avoid record duplicate face
-            #         most_common_combination = None
-            #         past_timesteps.clear()
-            #         time.sleep(2)
-            #     elif most_common_combination[0] != 'None' and most_common_combination[1] == 'happy':
-            #         # Start to play card game
-            #         player_1 = known_player[sorted_face_names[0]] # Player_1 
-            #         player_2 = known_player[most_common_combination[0]]
-            #         game_mode = not game_mode
-            #     else:
-            #         pass
 
         else:
             # Poker card game part
@@ -490,10 +470,16 @@ def main(opt):
                     card_1.add(label.item())
                     card_num_1 = []
                     card_num_1 = list(label_to_card_number(item) for item in card_1)
+                    card_number_str_1 = ' '.join(map(str,card_num_1))
+                    
+                    draw_text(card_number_str_1, RED, HEALTH_BAR_X_1, HEALTH_BAR_Y_1 + HEALTH_BAR_HEIGHT + 10)
                 elif ((box[1] + box[3]) / 2) < 0.5:
                     card_2.add(label.item())
                     card_num_2 = []
                     card_num_2 = list(label_to_card_number(item) for item in card_2)
+                    card_number_str_2 = ' '.join(map(str,card_num_2))
+ 
+                    draw_text(card_number_str_2, RED, HEALTH_BAR_X_2, HEALTH_BAR_Y_2 + HEALTH_BAR_HEIGHT + 10)
                 else:
                     pass
 
@@ -520,7 +506,7 @@ def main(opt):
                                 player_1.update()
                                 change_face(player_1, (1 - player_1.blood / FULL_HP) * 0.5)
                                 card_1.clear()
-                                card_2.clear()
+                                card_2.clear() 
                                 # player1 died
                                 if player_1.blood == 0:
                                     end_game = True
@@ -547,23 +533,23 @@ def main(opt):
                 exit()
        
             # print(card_1)
-            # print(card_num_1)
+            print(card_num_1)
             # print(card_2)
-            # print(card_num_2)
+            print(card_num_2)
             
         pygame.display.flip()
 
         # Control the frame rate
         clock.tick(fps)
     
-    # # Release the video capture and close Pygame
-    # video_capture.release()
-    # pygame.quit()
+    # Release the video capture and close Pygame
+    video_capture.release()
+    pygame.quit()
 
 def opt_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--known_face_dir', type=str, default='face_base')
-    parser.add_argument('--target_face_dir', type=str, default='target_face')
+    parser.add_argument('--target_face_dir', type=str, default='assets/target_face')
     parser.add_argument('--changed_face_dir', type=str, default='changed_face')
     parser.add_argument('--keypoints_dir', type=str, default='keypoints')
     parser.add_argument('--tri_dir', type=str, default='tri')
